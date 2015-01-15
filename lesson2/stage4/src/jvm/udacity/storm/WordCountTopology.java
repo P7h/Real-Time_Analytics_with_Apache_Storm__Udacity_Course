@@ -29,8 +29,6 @@ import java.util.Random;
 import com.lambdaworks.redis.RedisClient;
 import com.lambdaworks.redis.RedisConnection;
 
-import udacity.storm.spout.RandomSentenceSpout;
-
 /**
  * This topology demonstrates how to count distinct words from
  * a stream of words.
@@ -38,14 +36,12 @@ import udacity.storm.spout.RandomSentenceSpout;
  * This is an example for Udacity Real Time Analytics Course - ud381
  *
  */
-public class SentenceWordCountTopology {
+public class WordCountTopology {
 
   /**
    * Constructor - does nothing
    */
-
-   //Note: Constructor must match class name
-  private SentenceWordCountTopology() { }
+  private WordCountTopology() { }
 
   /**
    * A spout that emits a random word
@@ -100,58 +96,6 @@ public class SentenceWordCountTopology {
       outputFieldsDeclarer.declare(new Fields("word"));
     }
   }
-
-  //***************************************************************
-  // Add Sentence Splitter Bolt
-  //***************************************************************
-  /**
-   * A bolt that splits sentences it receives into words
-   */
-
-static class SplitSentenceBolt extends BaseRichBolt{
-  // To output tuples from this bolt to the count bolt
-  private OutputCollector collector;
-
-  @Override
-  public void prepare(
-      Map                     map,
-      TopologyContext         topologyContext,
-      OutputCollector         outputCollector)
-  {
-    // save the output collector for emitting tuples
-    collector = outputCollector;
-  }
-
-  @Override
-  public void execute(Tuple tuple)
-  {
-    // get the 1st column 'tweet' from tuple
-    String sentence = tuple.getString(0);
-
-    // provide the delimiters for splitting the tweet
-    String delims = "[ .,?!]+";
-
-    // now split the tweet into tokens
-    String[] tokens = sentence.split(delims);
-
-    // for each token/word, emit it
-    for (String token: tokens) {
-      collector.emit(new Values(token));
-    }
-  }
-
-  @Override
-  public void declareOutputFields(OutputFieldsDeclarer declarer)
-  {
-    // tell storm the schema of the output tuple for this spout
-    // tuple consists of a single column called 'sentence-word'
-    declarer.declare(new Fields("sentence-word"));
-  }
-}
-
-//***************************************************************
-// End Sentence Splitter Bolt
-//***************************************************************
 
   /**
    * A bolt that counts the words that it receives
@@ -277,17 +221,10 @@ static class SplitSentenceBolt extends BaseRichBolt{
     TopologyBuilder builder = new TopologyBuilder();
 
     // attach the word spout to the topology - parallelism of 5
-    //builder.setSpout("word-spout", new WordSpout(), 5);
-
-    // attach sentence spout to the topology - parallelism of 1
-    builder.setSpout("sentence-spout", new RandomSentenceSpout(), 1);
-
-    // attach split sentence split bolt to topology - parallelism of 15
-    //builder.setBolt("split-sentence-bolt", new SplitSentenceBolt(), 15).fieldsGrouping("sentence-spout", new Fields("sentence"));
-    builder.setBolt("split-sentence-bolt", new SplitSentenceBolt(), 15).shuffleGrouping("sentence-spout");
+    builder.setSpout("word-spout", new WordSpout(), 5);
 
     // attach the count bolt using fields grouping - parallelism of 15
-    builder.setBolt("count-bolt", new CountBolt(), 15).fieldsGrouping("split-sentence-bolt", new Fields("sentence-word"));
+    builder.setBolt("count-bolt", new CountBolt(), 15).fieldsGrouping("word-spout", new Fields("word"));
 
     // attach the report bolt using global grouping - parallelism of 1
     //***************************************************
@@ -326,8 +263,7 @@ static class SplitSentenceBolt extends BaseRichBolt{
       LocalCluster cluster = new LocalCluster();
 
       // submit the topology to the local cluster
-      // name topology
-      cluster.submitTopology("sentence-word-count", conf, builder.createTopology());
+      cluster.submitTopology("word-count", conf, builder.createTopology());
 
       //**********************************************************************
       // let the topology run for 30 seconds. note topologies never terminate!
